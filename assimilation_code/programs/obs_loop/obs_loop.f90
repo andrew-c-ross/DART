@@ -24,11 +24,13 @@ use    utilities_mod, only : initialize_utilities,            &
                              open_file, close_file, finalize_utilities
 
 use     location_mod, only : location_type, get_location, set_location,        &
-                             write_location, LocationDims, operator(/=)
+                             write_location, LocationDims, operator(/=), &
+                             query_location, VERTISSURFACE, VERTISHEIGHT
 
 use      obs_def_mod, only : obs_def_type, get_obs_def_type_of_obs,            &
                              get_obs_def_location, read_obs_def,               &
-                             set_obs_def_time, get_obs_def_time
+                             set_obs_def_time, get_obs_def_time, &
+                             set_obs_def_location
 
 use     obs_kind_mod, only : max_defined_types_of_obs,                         &
                              get_name_for_type_of_obs,                         &
@@ -149,8 +151,8 @@ call init_obs(     obs_in,  num_copies_in, num_qc_in)
 call init_obs(next_obs_in,  num_copies_in, num_qc_in)
 call init_obs(     obs_out, num_copies_in, num_qc_in)
 call init_obs(prev_obs_out, num_copies_in, num_qc_in)
-   
-! create the output sequence here 
+
+! create the output sequence here
 call init_obs_sequence(seq_out, num_copies_in, num_qc_in, size_seq_out)
 do j=1, num_copies_in
    meta_data = get_copy_meta_data(seq_in, j)
@@ -198,8 +200,8 @@ if ( get_first_obs(seq_in, obs_in) )  then
       ! call get_obs_def(obs_out, this_obs_def)
       ! obs_loc       = get_obs_def_location(this_obs_def)
       ! obs_loc_array = get_location(obs_loc)
- 
-      ! If you change something in the observation definition 
+
+      ! If you change something in the observation definition
       ! you have to update the actual observation.
 
       ! call set_obs_def(obs_out, this_obs_def)
@@ -207,6 +209,15 @@ if ( get_first_obs(seq_in, obs_in) )  then
       ! if you do NOT want to insert this observation in the output
       ! file, set a condition that skips the next block.  you *must*
       ! still call get_next_obs() before looping.
+
+      call get_obs_def(obs_out, this_obs_def)
+      obs_loc       = get_obs_def_location(this_obs_def)
+      obs_loc_array = get_location(obs_loc)
+      if (nint(query_location(obs_loc)) == VERTISSURFACE) then
+         obs_loc = set_location(obs_loc_array(1), obs_loc_array(2), 0.0_r8, VERTISHEIGHT)
+         call set_obs_def_location(this_obs_def, obs_loc)
+         call set_obs_def(obs_out, this_obs_def)
+      endif
 
       ! ----------- MODIFY HERE ----------------
 
@@ -217,16 +228,16 @@ if ( get_first_obs(seq_in, obs_in) )  then
          ! guaranteed to be in temporally-ascending order, we can use the
          ! 'previous' observation as the starting point to search for the
          ! correct insertion point.  This speeds up the insert code a lot.
-   
+
          if (num_inserted > 0) then
             call insert_obs_in_seq(seq_out, obs_out, prev_obs_out)
          else
             call insert_obs_in_seq(seq_out, obs_out)
          endif
-   
+
          prev_obs_out = obs_out  ! update position in seq for next insert
          num_inserted = num_inserted + 1
-   
+
          if (print_every > 0) then
             if (mod(num_inserted,print_every) == 0) then
                print*, 'inserted number ',num_inserted,' of ',size_seq_out
