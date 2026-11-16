@@ -27,6 +27,7 @@ fill_inflation_restart
 integrate_model
 obs_common_subset
 obs_diag
+obs_loop
 obs_sequence_tool
 )
 
