@@ -70,7 +70,7 @@ implicit none
 private
 
 ! routines required by DART code - will be called from filter and other
-! DART executables. 
+! DART executables.
 public :: get_model_size,         &
           get_state_meta_data,    &
           model_interpolate,      &
@@ -181,7 +181,7 @@ call set_vertical_localization_coord(VERTISHEIGHT)
 ! This time is both the minimum time you can ask the model to advance
 ! (for models that can be advanced by filter) and it sets the assimilation
 ! window.  All observations within +/- 1/2 this interval from the current
-! model time will be assimilated. If this is not settable at runtime 
+! model time will be assimilated. If this is not settable at runtime
 ! feel free to hardcode it and remove from the namelist.
 assimilation_time_step = set_time(assimilation_period_seconds, &
                                   assimilation_period_days)
@@ -203,7 +203,7 @@ call read_ocean_geometry() ! ocean vs. land and basin depth
 end subroutine static_init_model
 
 !------------------------------------------------------------------
-! Returns the number of items in the state vector as an integer. 
+! Returns the number of items in the state vector as an integer.
 function get_model_size()
 
 integer(i8) :: get_model_size
@@ -300,14 +300,14 @@ if (on_land(four_ilons, four_ilats)) then
    return
 endif
 
-if (use_pseudo_depth) then 
+if (use_pseudo_depth) then
 
    ! Get the bounding vertical levels and the fraction between bottom and top
    call find_level_bounds(lon_lat_vert(3), levz, levz_fract, locate_status)
    if (locate_status /= 0) then
       istatus(:) = locate_status
       return
-   endif   
+   endif
    ! pseudo depth is the same for all ensemble members
    lev(:,1) = levz(1) ! layer_below
    lev(:,2) = levz(2) ! layer_above
@@ -326,7 +326,7 @@ else
           quad_vals(corner, :) = get_state(th_indx, state_handle)
       enddo
 
-      
+
       call quad_lon_lat_evaluate(interp, &
                                  lon_lat_vert(1), lon_lat_vert(2), & ! lon, lat of obs
                                  four_ilons, four_ilats, &
@@ -343,7 +343,7 @@ else
 
       do e = 1, ens_size
          if (lon_lat_vert(3) < depth_at_x(e)) then
-            if (i ==1) then 
+            if (i ==1) then
               lev(e,1) = 1 ! in surface layer
               lev(e,2) = 1 ! in surface layer
               lev_fract(e) = 0.0_r8
@@ -394,12 +394,12 @@ select case (qty_in)
 
    case (QTY_SALINITY) ! convert from g of salt per kg of seawater (model) to kg of salt per kg of seawater (observation)
       call state_on_quad(four_ilons, four_ilats, lon_lat_vert, ens_size, lev, lev_fract, interp, state_handle, varid, expected_obs, quad_status)
-      if (quad_status /= 0) then 
+      if (quad_status /= 0) then
          istatus(:) = QUAD_EVALUATE_FAILED
          return
       endif
       expected_obs = expected_obs/CONCENTRATION_TO_PPT
- 
+
    case default
       call state_on_quad(four_ilons, four_ilats, lon_lat_vert, ens_size, lev, lev_fract, interp, state_handle, varid, expected_obs, quad_status)
       if (quad_status /= 0) then
@@ -420,7 +420,7 @@ integer,  intent(in) :: four_ilons(4), four_ilats(4) ! indices into lon, lat
 real(r8), intent(in) :: lon_lat_vert(3) ! lon, lat, vert of obs
 integer,  intent(in) :: ens_size
 integer,  intent(in) :: lev(ens_size,2) ! levels below and above obs
-real(r8), intent(in) :: lev_fract(ens_size) 
+real(r8), intent(in) :: lev_fract(ens_size)
 type(quad_interp_handle), intent(in) :: interp
 type(ensemble_type), intent(in) :: state_handle
 integer,  intent(in) :: varid ! which state variable
@@ -432,7 +432,7 @@ integer(i8) :: indx(ens_size)
 real(r8) :: quad_vals(4, ens_size)
 real(r8) :: expected(ens_size, 2) ! state value at level below and above obs
 
-do i = 1, 2 
+do i = 1, 2
    ! corner1
    do e = 1, ens_size
       indx(e) = get_dart_vector_index(four_ilons(1), four_ilats(1), lev(e, i), dom_id, varid)
@@ -475,7 +475,7 @@ expected_obs = expected(:,1) + lev_fract(:) * (expected(:,2) - expected(:,1))
 end subroutine state_on_quad
 
 !------------------------------------------------------------------
-! Returns the smallest increment in time that the model is capable 
+! Returns the smallest increment in time that the model is capable
 ! of advancing the state in a given implementation, or the shortest
 ! time you want the model to advance between assimilations.
 
@@ -643,7 +643,7 @@ if (.not. present(dist)) return
 do ii = 1, num_close
 
   ind = close_ind(ii)
-  if(loc_qtys(ind) == QTY_DRY_LAND) then 
+  if(loc_qtys(ind) == QTY_DRY_LAND) then
     dist(ii) = 1.0e9_r8
     cycle
   endif
@@ -653,7 +653,7 @@ do ii = 1, num_close
     call convert_vertical_state(ens_handle, 1, locs(ind:ind), loc_qtys(ind:ind), loc_indx(ind:ind), VERTISHEIGHT, istatus)
   endif
   call get_model_variable_indices(loc_indx(ind), i, j, k)
-  if ( below_sea_floor(i,j,lon_lat_vert(3)) ) then 
+  if ( below_sea_floor(i,j,lon_lat_vert(3)) ) then
     dist(ii) = 1.0e9_r8
     cycle
   endif
@@ -720,7 +720,7 @@ allocate(mask(nx,ny))  ! missing values
 call nc_get_variable(ncid, 'geolon', geolon, routine)
 call nc_get_variable(ncid, 'geolat', geolat, routine)
 
-! U 
+! U
 call nc_get_variable_size(ncid, 'geolon_u', nxy)
 nx_u = nxy(1); ny_u = nxy(2)
 allocate(geolon_u(nx_u,ny_u), geolat_u(nx_u,ny_u))  ! U grid
@@ -742,17 +742,17 @@ mask(:,:) = .false.
 mask_u(:,:) = .false.
 mask_v(:,:) = .false.
 call nc_get_attribute_from_variable(ncid, 'geolon', '_FillValue', fillval)
-where (geolon == fillval) mask = .true.  
+where (geolon == fillval) mask = .true.
 where (geolon == fillval) geolon = 72.51_r8
 where (geolat == fillval) geolat = 42.56_r8
 
 call nc_get_attribute_from_variable(ncid, 'geolon_u', '_FillValue', fillval)
-where (geolon_u == fillval) mask_u = .true.  
+where (geolon_u == fillval) mask_u = .true.
 where (geolon_u == fillval) geolon_u = 72.51_r8
 where (geolat_u == fillval) geolat_u = 42.56_r8
 
 call nc_get_attribute_from_variable(ncid, 'geolon_v', '_FillValue', fillval)
-where (geolon_v == fillval) mask_v = .true.  
+where (geolon_v == fillval) mask_v = .true.
 where (geolon_v == fillval) geolon_v = 72.51_r8
 where (geolat_v == fillval) geolat_v = 42.56_r8
 
@@ -845,7 +845,7 @@ logical :: on_land_point
 
 integer :: ilon_t, ilat_t
 
-! wet is only defined on the T grid. 
+! wet is only defined on the T grid.
 ! u/v grids may have one extra point in the x and/or y direction.
 ilon_t = min(ilon, nx)
 ilat_t = min(ilat, ny)
@@ -981,7 +981,7 @@ function on_layer(qty)
 logical :: on_layer
 integer :: qty
 
-! Salt, Temp, u, v all on layer 
+! Salt, Temp, u, v all on layer
 on_layer = .true.
 
 end function on_layer
@@ -992,7 +992,7 @@ subroutine setup_interpolation()
 ! T
 call init_quad_interp(GRID_QUAD_FULLY_IRREGULAR, nx, ny, &
                       QUAD_LOCATED_CELL_CENTERS, &
-                      global=.true., spans_lon_zero=.true., pole_wrap=.true., &
+                      global=.false., spans_lon_zero=.false., pole_wrap=.true., &
                       interp_handle=interp_t_grid)
 
 call set_quad_coords(interp_t_grid, geolon, geolat, mask)
@@ -1000,7 +1000,7 @@ call set_quad_coords(interp_t_grid, geolon, geolat, mask)
 ! U
 call init_quad_interp(GRID_QUAD_FULLY_IRREGULAR, nx_u, ny_u, &
                       QUAD_LOCATED_CELL_CENTERS, &
-                      global=.true., spans_lon_zero=.true., pole_wrap=.true., &
+                      global=.false., spans_lon_zero=.false., pole_wrap=.true., &
                       interp_handle=interp_u_grid)
 
 call set_quad_coords(interp_u_grid, geolon_u, geolat_u, mask_u)
@@ -1009,7 +1009,7 @@ call set_quad_coords(interp_u_grid, geolon_u, geolat_u, mask_u)
 ! V
 call init_quad_interp(GRID_QUAD_FULLY_IRREGULAR, nx_v, ny_v, &
                       QUAD_LOCATED_CELL_CENTERS, &
-                      global=.true., spans_lon_zero=.true., pole_wrap=.true., &
+                      global=.false., spans_lon_zero=.false., pole_wrap=.true., &
                       interp_handle=interp_v_grid)
 
 call set_quad_coords(interp_v_grid, geolon_v, geolat_v, mask_v)
@@ -1034,7 +1034,7 @@ endif
 end function
 
 !------------------------------------------------------------
-! calculate sensible (in-situ) temperature from 
+! calculate sensible (in-situ) temperature from
 ! local pressure, salinity, and potential temperature
 elemental function sensible_temp(potemp, s, lpres)
 
@@ -1069,7 +1069,7 @@ do i=1,n
          t = t + 0.5_r8 * x
          q = x
          p = p + 0.5_r8 * dp
-      
+
       else if (j == 2) then
          t = t + 0.29298322_r8 * (x-q)
          q = 0.58578644_r8 * x + 0.121320344_r8 * q
