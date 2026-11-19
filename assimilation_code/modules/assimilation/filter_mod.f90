@@ -25,14 +25,14 @@ use obs_def_mod,           only : obs_def_type, get_obs_def_error_variance, get_
 
 use obs_def_utilities_mod, only : set_debug_fwd_op
 
-use time_manager_mod,      only : time_type, get_time, set_time, operator(/=), operator(>),   &
-                                  operator(-), print_time
+use dart_time_manager_mod,      only : time_type, get_time, set_time, set_date, &
+                                  operator(/=), operator(>), operator(-), print_time
 
 use utilities_mod,         only : error_handler, E_ERR, E_MSG, E_DBG,                         &
                                   logfileunit, nmlfileunit, timestamp,                        &
                                   do_output, find_namelist_in_file, check_namelist_read,      &
                                   open_file, close_file, do_nml_file, do_nml_term, to_upper,  &
-                                  set_multiple_filename_lists, find_textfile_dims
+                                  set_multiple_filename_lists, find_textfile_dims, file_exist
 
 use assim_model_mod,       only : static_init_assim_model, get_model_size,                    &
                                   end_assim_model,  get_state_meta_data
@@ -40,7 +40,7 @@ use assim_model_mod,       only : static_init_assim_model, get_model_size,      
 use assim_tools_mod,       only : filter_assim, set_assim_tools_trace, test_state_copies
 use obs_model_mod,         only : move_ahead, advance_state, set_obs_model_trace
 
-use ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,                &
+use dart_ensemble_manager_mod,  only : init_ensemble_manager, end_ensemble_manager,                &
                                   ensemble_type, get_copy, get_my_num_copies, put_copy,       &
                                   all_vars_to_all_copies, all_copies_to_all_vars,             &
                                   compute_copy_mean, compute_copy_mean_sd,                    &
@@ -62,7 +62,7 @@ use adaptive_inflate_mod,  only : do_ss_inflate, mean_from_restart, sd_from_rest
                                   ENHANCED_SS_INFLATION
 
 use mpi_utilities_mod,     only : my_task_id, task_sync, broadcast_send, broadcast_recv,      &
-                                  task_count
+                                  task_count, initialize_mpi_utilities
 
 use perturb_mod,           only : perturb_ensemble
 
@@ -100,7 +100,13 @@ private
 
 public :: filter_sync_keys_time, &
           filter_set_initial_time, &
-          filter_main
+          filter_main, &
+          online_mode, &
+          online_X, &
+          online_time, &
+          online_obs_file, &
+          online_filter_init, &
+          online_filter_assim
 
 character(len=*), parameter :: source = 'filter_mod.f90'
 
@@ -108,6 +114,11 @@ character(len=*), parameter :: source = 'filter_mod.f90'
 character(len=512)      :: msgstring
 
 integer :: trace_level, timestamp_level
+
+logical, save :: online_mode = .false. 
+real(r8), pointer, dimension(:), save :: online_X => null()
+type(time_type), save :: online_time
+character(len=256), save :: online_obs_file
 
 ! Defining whether diagnostics are for prior or posterior
 integer, parameter :: PRIOR_DIAG = 0, POSTERIOR_DIAG = 2
@@ -372,6 +383,12 @@ call find_namelist_in_file("input.nml", "filter_nml", iunit)
 read(iunit, nml = filter_nml, iostat = io)
 call check_namelist_read(iunit, io, "filter_nml")
 
+! Overwrite some model level vars set by namelist with the right values for online mode
+if (online_mode) then
+  obs_sequence_in_name = online_obs_file
+  obs_sequence_out_name = trim(online_obs_file)//'.final'
+endif
+
 ! Record the namelist values used for the run ...
 if (do_nml_file()) write(nmlfileunit, nml=filter_nml)
 if (do_nml_term()) write(     *     , nml=filter_nml)
@@ -574,8 +591,12 @@ call set_inflation_sd_copy(   prior_inflate, PRIOR_INF_SD_COPY )
 call set_inflation_mean_copy( post_inflate,  POST_INF_COPY )
 call set_inflation_sd_copy(   post_inflate,  POST_INF_SD_COPY )
 
-call read_state(state_ens_handle, file_info_input, read_time_from_file, time1, &
-                prior_inflate, post_inflate, perturb_from_single_instance)
+if (online_mode) then
+  call online_read_state(state_ens_handle, time1)
+else
+   call read_state(state_ens_handle, file_info_input, read_time_from_file, time1, &
+                  prior_inflate, post_inflate, perturb_from_single_instance)
+endif
 
 ! This must be after read_state
 call get_minmax_task_zero(prior_inflate, state_ens_handle, PRIOR_INF_COPY, PRIOR_INF_SD_COPY)
@@ -1103,9 +1124,12 @@ if (get_stage_to_write('output')) then
       call     trace_message('Before state space output')
       call timestamp_message('Before state space output')
 
+      if (online_mode) then
+         call online_write_state(state_ens_handle)
       ! will write outside loop
-      if (.not. write_all_stages_at_end) &
+      else if (.not. write_all_stages_at_end) then
          call write_state(state_ens_handle, file_info_output)
+      endif
    
       call timestamp_message('After  state space output')
       call     trace_message('After  state space output')
@@ -2684,6 +2708,52 @@ if (output_inflation) then
 endif
 
 end subroutine set_copies
+
+subroutine online_read_state(ens, time1)
+  type(ensemble_type), intent(inout) :: ens
+  type(time_type), intent(out) :: time1
+  ! may need to check if vars and time are allocated
+  ens%vars(:, 1) = online_X
+  ens%time(:) = online_time
+  time1 = online_time
+  call all_vars_to_all_copies(ens)
+end subroutine online_read_state
+
+subroutine online_write_state(ens)
+  type(ensemble_type), intent(inout) :: ens
+  call all_copies_to_all_vars(ens)
+  online_X = ens%vars(:, 1)
+end subroutine online_write_state
+
+subroutine online_filter_init(comm, model_size)
+  integer, intent(in) :: comm
+  integer(i8), intent(out) :: model_size
+  integer :: iunit, io
+
+  call initialize_mpi_utilities('MOM6_DART', communicator=comm)
+  call filter_initialize_modules_used()
+  call find_namelist_in_file('input.nml', 'filter_nml', iunit)
+  read(iunit, nml=filter_nml, iostat=io)
+  call check_namelist_read(iunit, io, 'filter_nml')
+  if (task_count() /= ens_size) call error_handler(E_ERR, &
+    'filter_online_init', 'DART tasks must be equal to ensemble size')
+    model_size = get_model_size()
+   online_mode = .true. 
+end subroutine online_filter_init
+
+subroutine online_filter_assim(X, year, month, day, hr, min, sec, obs_file)
+real(r8), dimension(:), target, intent(inout) :: X
+integer :: year, month, day, hr, min, sec
+character(len=*), intent(in) :: obs_file
+
+  if (.not. file_exist(obs_file)) return
+  online_X => X
+  online_time = set_date(year, month, day, hr, min, sec)
+  online_obs_file = obs_file
+  call filter_main()
+  nullify(online_X)
+
+end subroutine online_filter_assim
 
 !==================================================================
 ! TEST FUNCTIONS BELOW THIS POINT
